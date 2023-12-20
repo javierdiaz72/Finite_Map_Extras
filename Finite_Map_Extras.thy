@@ -698,4 +698,668 @@ proof -
   finally show ?thesis .
 qed
 
+
+definition map_id :: "'a set \<Rightarrow> ('a, 'a) map" where 
+  "map_id D = (\<lambda>x. if x \<in> D then Some x else None)"
+
+lemma map_id_simps[simp] : 
+  "(map_id D x = None) = (x \<notin> D)"
+  "(map_id D x = Some y) = (x = y \<and> y \<in> D)"
+  "dom(map_id D) = D"
+  "ran(map_id D) = D"
+  unfolding map_id_def ran_def
+  by auto (meson option.distinct(1))
+
+context
+  includes fmap.lifting
+           fset.lifting
+begin
+
+lift_definition fmap_id :: "'a fset \<Rightarrow> ('a,'a) fmap"
+is "map_id" by simp
+
+lemma fmap_id_fmlookup : 
+  "fmlookup (fmap_id d) x = (if x |\<in>| d then Some x else None)"
+  by transfer' (simp add: map_id_def)
+
+lemma fmap_id_fmlookup_simps[simp] :
+  "x |\<in>| d \<Longrightarrow> fmlookup (fmap_id d) x = Some x"
+  "x |\<notin>| d \<Longrightarrow> fmlookup (fmap_id d) x = None"
+  by (simp_all add: fmap_id_fmlookup)
+
+lemma fmap_id_simps[simp] : 
+  "(fmlookup (fmap_id d) x = None) = (x |\<notin>| d)"
+  "(fmlookup (fmap_id d) x = Some y) = (x = y \<and> y |\<in>| d)"
+  "fmdom (fmap_id d) = d"
+  "fmran (fmap_id d) = d"
+  apply transfer apply simp
+  apply transfer apply simp
+  apply transfer apply simp
+  apply transfer apply simp
+done
+
+lift_definition fminvimage :: "('a, 'b) fmap \<Rightarrow> 'b fset \<Rightarrow> 'a fset" is "\<lambda>m S. {a | a b. m a = Some b \<and> b \<in> S}"
+subgoal for m S
+  apply (rule finite_subset[where B = "dom m"])
+  apply (auto simp: ran_def)
+  done
+  done
+
+lemma fminvimage_empty[simp]: "fminvimage m fempty = fempty"
+by transfer' auto
+
+lemma fminvimage_subset_ran[simp]: "fminvimage m S |\<subseteq>| fmdom m"
+by transfer' (auto simp: dom_def)
+
+lemma fmimage_dom_subset: "fmdom m |\<subseteq>| S \<Longrightarrow> fmimage m S = fmran m"
+by transfer' (auto simp: ran_def)
+
+lemma fminvimage_ran_subset: "fmran m |\<subseteq>| S \<Longrightarrow> fminvimage m S = fmdom m"
+  by transfer' (auto simp: ran_def)
+
+lemma fminvimage_ran[simp]: "fminvimage m (fmran m) = fmdom m"
+  by transfer' (auto simp: ran_def)
+
+lemma fmlookup_invimage_iff : "\<And>y. (y |\<in>| fminvimage m S) = (\<exists>x. fmlookup m y = Some x \<and> x |\<in>| S)"
+by transfer' simp
+
+lemma fmran_fmcomp : "fmran (g \<circ>\<^sub>f f) = fmimage g (fmran f)"
+  by transfer' (auto simp add: ran_def map_comp_Some_iff)
+
+lemma fmdom_fmcomp : "fmdom (g \<circ>\<^sub>f f) = fminvimage f (fmdom g)"
+  apply transfer' 
+  apply (auto simp add: dom_def map_comp_Some_iff)
+  done
+
+
+lemma fmimage_image: "fmimage g (fmimage f S) = fmimage (g \<circ>\<^sub>f f) S"
+  by (auto simp add: fset_eq_iff fmlookup_image_iff Option.bind_eq_Some_conv)
+
+end
+
+lemma fmcomp_ran_subset:
+  assumes "fmran g |\<subseteq>| K"
+  shows "fmran (g \<circ>\<^sub>f f) |\<subseteq>| K"
+  using assms
+  by (metis dual_order.trans fmimage_subset_ran fmran_fmcomp)
+
+lemma fmcomp_ran_superset:
+  assumes "fmran f = fmdom g"
+  assumes "fmran g = K"
+  shows "K |\<subseteq>| fmran (g \<circ>\<^sub>f f)"
+  using assms
+  by (simp add: fmran_fmcomp)
+
+lemma fmcomp_ran_equiv:
+  assumes \<open>fmran f = fmdom g\<close>
+  shows \<open>fmran (g \<circ>\<^sub>f f) = fmran g\<close>
+  by (simp add: assms fmran_fmcomp)
+
+
+lemma comp_fmdom_preserve[simp]:
+  assumes "fmran f = fmdom g" 
+  shows "fmdom (g \<circ>\<^sub>f f) = fmdom f"
+by (simp add: assms[symmetric] fmdom_fmcomp) 
+
+
+context
+  includes fmap.lifting
+begin
+lemma map_comp_assoc: "m1 \<circ>\<^sub>m (m2 \<circ>\<^sub>m m3) = m1 \<circ>\<^sub>m m2 \<circ>\<^sub>m m3" 
+  by (auto simp: map_comp_def split: option.splits)
+
+lemma fmap_comp_assoc: "m1 \<circ>\<^sub>f (m2 \<circ>\<^sub>f m3) = m1 \<circ>\<^sub>f m2 \<circ>\<^sub>f m3"
+  using map_comp_assoc[transferred] .
+
+end
+
+lemma fmdom_comp_fmdom[simp]:
+  \<open>fmdom f = V \<Longrightarrow> fmdom (g \<circ>\<^sub>f f) |\<subseteq>| V\<close>
+  by fastforce
+
+lemma fmdom_comp_fmdom2[simp]:
+  \<open>fmran f |\<subseteq>| fmdom g \<Longrightarrow> fmdom (g \<circ>\<^sub>f f) = fmdom f\<close>
+  using fin_mono fmdom_notD fmranI by fastforce
+
+definition map_inj :: "('a, 'b) map \<Rightarrow> bool" where
+ "map_inj m \<equiv> inj_on m (dom m)"
+
+lemma map_inj_expand: 
+  "map_inj m = (\<forall>x1 x2 y. m x1 = Some y \<and> m x2 = Some y \<longrightarrow> (x1 = x2))" 
+  unfolding map_inj_def dom_def inj_on_def
+  by auto
+
+lemma map_injD[dest]:
+  assumes \<open>map_inj m\<close>
+  assumes \<open>x \<in> dom m\<close>
+  assumes \<open>y \<in> dom m\<close>
+  assumes \<open>m x = m y\<close>
+  shows \<open>x = y\<close>
+  using assms
+  by (auto simp add: map_inj_def dest: inj_onD)
+
+lemma map_injI[intro]:
+  "(\<And>x y. x \<in> dom m \<Longrightarrow> y \<in> dom m \<Longrightarrow> m x = m y \<Longrightarrow> x = y) \<Longrightarrow> map_inj m"
+  by (simp add: domI map_inj_expand)
+
+lemma map_inj_compI[intro]:
+  assumes \<open>map_inj f\<close>
+  assumes \<open>map_inj g\<close>
+  shows \<open>map_inj (g \<circ>\<^sub>m f)\<close>
+  using assms
+  by (auto simp add: map_inj_def inj_on_def map_comp_def domI split: option.splits)
+
+lemma map_inj_comp_f_inj:
+  assumes \<open>map_inj (g \<circ>\<^sub>m f)\<close>
+  assumes \<open>ran f \<subseteq> dom g\<close>
+  shows \<open>map_inj f\<close>
+  using assms
+  unfolding map_inj_expand
+  unfolding ran_def dom_def subset_iff
+  by auto
+
+lemma map_eq_induct[consumes 0, case_names NotInDom InDom]:
+  "\<lbrakk>(\<And>x. m1 x = None \<Longrightarrow> m2 x = None); (\<And>x y. m1 x = Some y \<Longrightarrow> m2 x = Some y)\<rbrakk> \<Longrightarrow> (m1 = m2)"
+  by (metis option.exhaust fun_eq_iff)
+
+lemma fmap_eq_induct[consumes 0, case_names NotInDom InDom]:
+  "\<And>fm1 fm2. (\<And>x. fmlookup fm1 x = None \<Longrightarrow> fmlookup fm2 x = None) \<Longrightarrow> (\<And>x y. fmlookup fm1 x = Some y \<Longrightarrow> fmlookup fm2 x = Some y) \<Longrightarrow> (fm1 = fm2)"
+  by (metis option.exhaust fmap_ext)
+
+
+context
+  includes fmap.lifting fset.lifting
+begin
+
+lift_definition fmap_inj :: "('a,'b) fmap \<Rightarrow> bool"
+is "map_inj" .
+
+lemma fmap_injE[elim]:
+  fixes x y g
+  assumes \<open>fmap_inj g\<close>
+  assumes \<open>x |\<in>| fmdom g\<close>
+  assumes \<open>y |\<in>| fmdom g\<close>
+  assumes \<open>fmlookup g x = fmlookup g y\<close>
+  shows \<open>x = y\<close>
+  using assms
+  by transfer' (simp add: assms map_inj_def inj_onD)
+ 
+lemma fmap_injI[intro]:
+  assumes \<open>\<And>x y. x |\<in>| fmdom g \<Longrightarrow> y |\<in>| fmdom g \<Longrightarrow> fmlookup g x = fmlookup g y \<Longrightarrow> x = y\<close>
+  shows \<open>fmap_inj g\<close>
+  using assms
+  by transfer' auto
+
+lemma fmap_inj_spec : 
+  "fmap_inj f = (\<forall>x y. x |\<in>| fmdom f \<longrightarrow> y |\<in>| fmdom f \<longrightarrow> fmlookup f x = fmlookup f y \<longrightarrow> (x = y))"
+  by (metis fmap_injE fmap_injI)
+
+lemma fmap_inj_eq_some_simp [simp] : 
+  "fmap_inj f \<Longrightarrow> fmlookup f x = Some v \<Longrightarrow> ((fmlookup f y = Some v) = (y = x))"
+  by (auto simp add: fmap_inj_spec iff: fmlookup_dom_iff)
+
+
+lemma fmap_inj_compI[intro]:
+  assumes \<open>fmap_inj f\<close>
+  assumes \<open>fmap_inj g\<close>
+  shows \<open>fmap_inj (g \<circ>\<^sub>f f)\<close>
+  using assms
+  by transfer' (intro map_inj_compI)
+
+lemma fmap_inj_comp_f_inj:
+  assumes \<open>fmap_inj (g \<circ>\<^sub>f f)\<close>
+  assumes \<open>fmran f |\<subseteq>| fmdom g\<close>
+  shows \<open>fmap_inj f\<close>
+  using assms
+  by transfer' (fact map_inj_comp_f_inj)
+
+lemma fmap_inj_id : "fmap_inj (fmap_id d)"
+  by (intro fmap_injI) simp
+
+lemma map_comp_eq_None_iff : "((f \<circ>\<^sub>m g) x = None) = (g x = None \<or> (\<forall>y. g x = Some y \<longrightarrow> f y = None))"
+proof (cases "g x")
+  case None
+  then show ?thesis 
+    unfolding map_comp_def
+    by simp
+next
+  case (Some y)
+  then show ?thesis
+    unfolding map_comp_def
+    by simp
+qed
+  
+lemma map_comp_eq_Some_iff : "((f \<circ>\<^sub>m g) x = Some z) = (\<exists>y. g x = Some y \<and> f y = Some z)"
+proof (cases "g x")
+  case None
+  then show ?thesis 
+    unfolding map_comp_def
+    by simp
+next
+  case (Some y)
+  then show ?thesis
+    unfolding map_comp_def
+    by simp
+qed
+
+lemma fmap_comp_eq_Some_iff : "(fmlookup (f \<circ>\<^sub>f g) x = Some z) = (\<exists>y. fmlookup g x = Some y \<and> fmlookup f y = Some z)"
+  by transfer (rule map_comp_eq_Some_iff)
+
+lemma fmap_comp_eq_None_iff : "(fmlookup (f \<circ>\<^sub>f g) x = None) = (fmlookup g x = None \<or> (\<forall>y. fmlookup g x = Some y \<longrightarrow> fmlookup f y = None))"
+  by transfer (rule map_comp_eq_None_iff)
+
+  
+
+lemma map_id_comp_right_cancel:
+  assumes dom_f: "dom f \<subseteq> d"
+    shows "f \<circ>\<^sub>m map_id d = f"
+proof (induction rule: map_eq_induct)
+  case (NotInDom x)
+  with dom_f show ?case     
+    by (auto simp add: map_comp_eq_None_iff dom_def)    
+next
+  case (InDom x y)
+  then show ?case 
+    by (simp add: map_comp_eq_Some_iff dom_def)    
+qed
+
+lemma map_id_comp_right:
+    shows "f \<circ>\<^sub>m map_id d = map_restrict_set d f"
+proof (induction rule: map_eq_induct)
+  case (NotInDom x)
+  thus ?case     
+    by (simp add: map_comp_eq_None_iff map_restrict_set_def map_filter_def)    
+next
+  case (InDom x y)
+  then show ?case 
+    by (simp add: map_comp_eq_Some_iff map_restrict_set_def map_filter_def)    
+qed
+
+lemma map_id_comp_left_cancel:
+  assumes dom_f: "ran f \<subseteq> d"
+    shows "map_id d \<circ>\<^sub>m f = f"
+proof (induction rule: map_eq_induct)
+  case (NotInDom x)
+  with dom_f show ?case     
+    by (auto simp add: map_comp_eq_None_iff ran_def subset_iff)    
+       (meson option.exhaust)
+    
+next
+  case (InDom x y)
+  then show ?case 
+    by (simp add: map_comp_eq_Some_iff dom_def)    
+qed
+
+lemma map_id_comp_left:
+    shows "map_id d \<circ>\<^sub>m f = map_restrict_set {x. \<exists>y. f x = Some y \<and> y \<in> d} f"
+proof (induction rule: map_eq_induct)
+  case (NotInDom x)
+  thus ?case     
+    by (auto simp add: map_comp_eq_None_iff map_restrict_set_def map_filter_def)    
+next
+  case (InDom x y)
+  then show ?case 
+    by (simp add: map_comp_eq_Some_iff map_restrict_set_def map_filter_def)    
+qed
+
+
+lemma fmap_id_comp_right_cancel:
+  "fmdom f |\<subseteq>| d \<Longrightarrow> f \<circ>\<^sub>f fmap_id d = f"
+  by transfer (rule map_id_comp_right_cancel)
+
+lemma fmap_id_comp_right:
+  "f \<circ>\<^sub>f fmap_id d = fmrestrict_fset d f"
+  by transfer (rule map_id_comp_right)
+
+lemma fmap_id_comp_left_cancel:
+  "fmran f |\<subseteq>| d \<Longrightarrow> fmap_id d \<circ>\<^sub>f f = f"
+  by transfer (rule map_id_comp_left_cancel)
+
+
+lift_definition fmap_bij_betw :: "('a, 'b) fmap \<Rightarrow> 'a fset \<Rightarrow> 'b fset \<Rightarrow> bool" 
+is "\<lambda>f A B. bij_betw (the \<circ> f) A B" .
+
+lemma fmap_bij_implies_inj:
+  assumes \<open>fmap_bij_betw f (fmdom f) (fmran f)\<close>
+  shows \<open>fmap_inj f\<close>
+  using assms
+  apply transfer
+  apply(intro map_injI)
+  by (metis bij_betw_inv_into_left comp_apply)
+
+lemma fmap_inj_implies_bij:
+  assumes \<open>fmap_inj f\<close>
+  shows  \<open>fmap_bij_betw f (fmdom f) (fmran f)\<close>
+  using assms
+  by transfer (auto simp  add: inj_on_def bij_betw_def ran_alt_def domIff ranI)
+
+lemma fmap_bijection_iff_injection:
+  \<open>fmap_bij_betw f (fmdom f) (fmran f) \<longleftrightarrow> fmap_inj f\<close>
+proof
+  show \<open>fmap_inj f\<close> if \<open>fmap_bij_betw f (fmdom f) (fmran f)\<close>
+    by (simp add: fmap_bij_implies_inj that)
+next
+  show \<open>fmap_bij_betw f (fmdom f) (fmran f) \<close> if \<open>fmap_inj f \<close>
+    by (simp add: fmap_inj_implies_bij that)
+qed
+end
+
+
+definition inverse_map :: "('a,'b) map \<Rightarrow> ('b,'a) map" where
+"inverse_map m = (\<lambda>b. if b \<in> ran m then Some (SOME k. m k = Some b) else None)"
+
+lemma dom_inverse_ran[simp]:
+  shows "dom (inverse_map m) = ran m"
+  by (simp add: inverse_map_def ran_def dom_def)
+
+lemma inverse_range_subset_of_dom[simp]:
+  \<open>ran (inverse_map m) \<subseteq> dom m\<close>
+  apply (auto simp: inverse_map_def ran_def split: if_splits)
+  by (meson someI_ex)
+
+lemma inj_on_dom_subset_of_inverse_range[simp]:
+  assumes "inj_on m (dom m)"
+  shows \<open>dom m \<subseteq> ran (inverse_map m)\<close>
+  using assms
+  apply (auto simp: inverse_map_def ran_def inj_on_def dom_def)
+  by (metis (mono_tags, lifting) someI_ex)
+
+lemma ran_inj_inverse_dom[simp]:
+  assumes "inj_on m (dom m)"
+  shows "ran (inverse_map m) = dom m"
+  using assms inverse_range_subset_of_dom inj_on_dom_subset_of_inverse_range
+  by fast
+
+lemma inverse_map_retrieves_original:
+  assumes \<open>inverse_map m b = Some k\<close>
+  shows \<open>m k = Some b\<close>
+    using assms some_eq_imp[of "\<lambda>x. m x = Some b" k]
+    by (auto simp: ran_def inverse_map_def split: if_splits)
+
+lemma inj_on_map_implies_correct_inverse:
+  assumes \<open>inj_on m (dom m)\<close>
+  assumes \<open>m k = Some b\<close> 
+  shows \<open>inverse_map m b = Some k\<close>
+  using assms
+  by (auto simp add: inverse_map_def ran_def domI inj_onD some_equality)
+
+lemma inj_map_inverse_correct:
+  assumes \<open>inj_on m (dom m)\<close>
+  shows "(inverse_map m) b = Some k \<longleftrightarrow> m k = Some b"
+proof
+  show \<open>m k = Some b\<close> if \<open>inverse_map m b = Some k\<close>
+    using inverse_map_retrieves_original[OF that]
+    by assumption
+next
+  show \<open>inverse_map m b = Some k\<close> if \<open>m k = Some b\<close>
+    using inj_on_map_implies_correct_inverse[OF assms that]
+    by assumption
+qed
+
+lemma inj_m_inverse_inj:
+  assumes \<open>inj_on m (dom m)\<close>
+  shows \<open>inj_on (inverse_map m) (ran m)\<close>
+proof -
+  have \<open>x = y\<close> if \<open>(inverse_map m) x = (inverse_map m) y\<close> \<open>x \<in> ran m\<close>  \<open>y \<in> ran m\<close> for x y
+    using that assms
+    by (metis inverse_map_def inverse_map_retrieves_original option.inject)
+
+  thus ?thesis
+    by (simp add: inj_on_def)
+qed
+
+lemma inj_map_double_inverse_identity:
+  assumes \<open>inj_on m (dom m)\<close>
+  shows \<open>inverse_map (inverse_map m) = m\<close>
+proof -
+  have \<open>inverse_map (inverse_map m) x = m x\<close> for x
+  proof (cases \<open>x \<in> dom m\<close>)
+    case True
+    then obtain y where y_def: \<open>m x = Some y\<close>
+      by blast
+    then have a:\<open>(inverse_map m) y = Some x\<close>
+      using assms
+      by (simp add: assms inj_map_inverse_correct)
+    then have \<open>(inverse_map (inverse_map m)) x = Some y\<close>
+      by (simp add: assms inj_m_inverse_inj inj_map_inverse_correct)
+    thus ?thesis
+      by (simp add: y_def)
+  next
+    case False
+    then show ?thesis 
+      using assms
+      by (auto simp add: inverse_map_def dest: ran_inj_inverse_dom)
+  qed
+
+  thus ?thesis ..
+qed
+
+lemma map_inverse_correct:
+  shows "\<And>(m :: ('a, 'b) map) b k. (inverse_map m) b = Some k \<Longrightarrow> m k = Some b" 
+        "\<And>(m :: ('a, 'b) map) b. (inverse_map m) b = None \<equiv> (b \<notin> ran m)"
+        "\<And>(m :: ('a, 'b) map) b k. m k = Some b \<Longrightarrow> b \<in> dom (inverse_map m)"
+        "\<And>(m :: ('a, 'b) map) k. m k = None \<Longrightarrow> (k \<notin> ran (inverse_map m))"
+proof -
+  show main: "\<And>(m :: ('a, 'b) map) b k. (inverse_map m) b = Some k \<Longrightarrow> m k = Some b" 
+    by (simp add: inverse_map_def ran_def)
+       (metis (mono_tags, lifting) option.distinct(1) option.inject some_eq_ex)
+
+  show main2: "\<And>(m :: ('a, 'b) map) b. (inverse_map m) b = None \<equiv> (b \<notin> ran m)"
+    by (simp add: inverse_map_def ran_def)
+       (smt (verit) option.distinct(1))
+
+  show "\<And>(m :: ('a, 'b) map) b k. m k = Some b \<Longrightarrow> b \<in> dom (inverse_map m)"
+    using main2 unfolding dom_def by (auto simp add: ran_def) 
+
+  show "\<And>(m :: ('a, 'b) map) k. m k = None \<Longrightarrow> (k \<notin> ran (inverse_map m))"
+    using main unfolding ran_def by fastforce
+qed
+
+context
+  includes fmap.lifting fset.lifting
+begin
+
+lift_definition inverse_fmap :: "('a,'b) fmap \<Rightarrow> ('b,'a) fmap" 
+  is inverse_map 
+  by (simp add: finite_ran)
+
+lemma fmap_inj_double_inverse[simp]:
+  assumes \<open>fmap_inj m\<close>
+  shows \<open>inverse_fmap (inverse_fmap m) = m\<close>
+  using assms
+  by transfer' (simp add:inj_map_double_inverse_identity map_inj_def)
+  
+lemma fmdom_inverse_fmran[simp]:
+  shows "fmdom (inverse_fmap m) = fmran m"
+  by transfer simp
+
+lemma inverse_range_subset_of_fdom[simp]:
+  \<open>fmran (inverse_fmap m) |\<subseteq>| fmdom m\<close>
+  by transfer simp
+
+lemma inj_fdom_subset_of_inverse_range[simp]:
+  assumes "fmap_inj m"
+  shows \<open>fmdom m |\<subseteq>| fmran (inverse_fmap m)\<close>
+  using assms
+  by transfer' (simp add: map_inj_def)
+
+lemma fran_inj_inverse_fdom[simp]:
+  assumes "fmap_inj m"
+  shows "fmran (inverse_fmap m) = fmdom m"
+  using assms
+  by transfer (simp add: map_inj_def)
+
+lemma inverse_fmap_retrieves_original:
+  assumes \<open>fmlookup (inverse_fmap m) b = Some k\<close>
+  shows \<open>fmlookup m k = Some b\<close>
+  using assms
+  by transfer' (auto dest: inverse_map_retrieves_original)
+
+lemma inj_fmap_implies_correct_inverse:
+  assumes \<open>fmap_inj m\<close>
+  assumes \<open>fmlookup m k = Some b\<close> 
+  shows \<open>fmlookup (inverse_fmap m) b = Some k\<close>
+  using assms
+  by transfer' (simp add: map_inj_def inj_map_inverse_correct)
+
+lemma inj_fmap_inverse_correct:
+  assumes "fmap_inj m"
+  shows "fmlookup (inverse_fmap m) b = Some k \<longleftrightarrow> fmlookup m k = Some b"
+  using assms
+  by transfer' (simp add: map_inj_def inj_map_inverse_correct)
+
+lemma inj_m_inverse_inj_fmap:
+  assumes \<open>fmap_inj m\<close>
+  shows \<open>fmap_inj (inverse_fmap m)\<close>
+  using assms
+  by transfer' (simp add: map_inj_def inj_m_inverse_inj)
+
+end
+
+
+
+lemma inverse_fmap_left_cancel_inj [simp]: 
+  assumes "fmap_inj f"
+  shows "inverse_fmap f \<circ>\<^sub>f f = fmap_id (fmdom f)"
+  apply (rule fmap_ext)
+  apply (auto simp add: fmlookup_dom_iff fmap_id_fmlookup)  
+  by (meson assms inj_fmap_inverse_correct)
+
+lemma inverse_fmap_left_cancel_inj_assoc [simp]: 
+  assumes "fmap_inj f"
+  shows "g \<circ>\<^sub>f inverse_fmap f \<circ>\<^sub>f f = g \<circ>\<^sub>f fmap_id (fmdom f)"
+  by (metis assms fmap_comp_assoc inverse_fmap_left_cancel_inj)
+
+
+lemma inverse_fmap_left_right [simp]: 
+  shows "f \<circ>\<^sub>f inverse_fmap f = fmap_id (fmran f)"
+  apply (rule fmap_ext)
+  apply (simp add: fmlookup_dom_iff fmlookup_ran_iff fmap_id_fmlookup bind_eq_Some_conv bind_eq_None_conv)  
+  by (metis fmdom_inverse_fmran fmdom_notI fmranI inverse_fmap_retrieves_original option.collapse)
+
+lemma inverse_fmap_left_right_assoc [simp]: 
+  shows "g \<circ>\<^sub>f f \<circ>\<^sub>f inverse_fmap f = g \<circ>\<^sub>f fmap_id (fmran f)"
+  by (metis fmap_comp_assoc inverse_fmap_left_right)
+
+lemma fmap_ext_iff:
+  "(m = n) = (\<forall>x. fmlookup m x = fmlookup n x)"
+  using fmap_ext by auto
+
+lemma fmap_ext_iff_cases:
+  "(m = n) = ((\<forall>x y. fmlookup m x = Some y \<longrightarrow> fmlookup n x = Some y) \<and> (\<forall>x. fmlookup m x = None \<longrightarrow> fmlookup n x = None))"
+  unfolding fmap_ext_iff
+  by (metis not_Some_eq)
+
+
+lemma fminvimage_inverse_fmap_subset: "fminvimage (inverse_fmap f) S |\<subseteq>| fmimage f S"
+  by (simp add: fsubset_iff fmlookup_invimage_iff fmlookup_image_iff)
+     (meson inverse_fmap_retrieves_original)
+
+lemma fminvimage_inverse_fmap_eq: "fmap_inj f \<Longrightarrow>fminvimage (inverse_fmap f) S = fmimage f S"
+  by (simp add: fset_eq_iff fmlookup_invimage_iff fmlookup_image_iff inj_fmap_inverse_correct)
+
+
+lemma fmadd_injI :
+  assumes inj_f1: "fmap_inj f1"
+      and inj_f2: "fmap_inj f2"
+      and ran_disjoint: "fmran f1 |\<inter>| fmran f2 = {||}"
+    shows "fmap_inj (fmadd f1 f2)"
+  using assms
+  unfolding fmap_inj_spec fmlookup_dom_iff fmlookup_ran_iff fset_eq_iff finter_iff
+  by (simp add: fmlookup_dom_iff) metis
+
+lemma fmadd_injE_disjoint :
+  assumes inj_f12: "fmap_inj (fmadd f1 f2)"
+      and disjoint: "fmdom f1 |\<inter>| fmdom f2 = {||}"
+    shows "fmap_inj f1"
+      and "fmap_inj f2"
+      and "fmran f1 |\<inter>| fmran f2 = {||}"
+proof -
+  from disjoint have f12_simp: "\<And>x. x |\<in>| fmdom f1 \<Longrightarrow> x |\<notin>| fmdom f2" 
+                 and f21_simp: "\<And>x. x |\<in>| fmdom f2 \<Longrightarrow> x |\<notin>| fmdom f1" 
+    by (simp_all add: fset_eq_iff) blast
+
+  from inj_f12 disjoint
+  show "fmap_inj f1" "fmap_inj f2" by (simp_all add: fmap_inj_spec f12_simp)
+
+  have "\<And>x. \<lbrakk>x |\<in>| fmran f1; x |\<in>| fmran f2\<rbrakk> \<Longrightarrow> False" 
+  proof -
+    fix x
+    assume "x |\<in>| fmran f1" then obtain y1 where y1: "fmlookup f1 y1 = Some x"
+      unfolding fmlookup_ran_iff 
+      by blast
+    assume "x |\<in>| fmran f2" then obtain y2 where y2: "fmlookup f2 y2 = Some x"
+      unfolding fmlookup_ran_iff 
+      by blast
+
+    
+    from y1 have y1_dom: "y1 |\<in>| fmdom f1"
+      unfolding fmlookup_dom_iff by blast
+
+    hence y1_nin_dom: "y1 |\<notin>| fmdom f2"
+      by (rule f12_simp)
+
+    from y2 have y2_dom: "y2 |\<in>| fmdom f2"
+      unfolding fmlookup_dom_iff by blast
+    hence y2_nin_dom: "y2 |\<notin>| fmdom f1"
+      by (rule f21_simp)
+
+    have "y1 = y2" 
+      apply (rule fmap_injE[OF inj_f12])
+      apply (simp_all add: y1_dom y2_dom y1_nin_dom y1 y2)
+      done
+    with y1_dom y2_nin_dom show False by blast
+  qed
+    
+  thus "fmran f1 |\<inter>| fmran f2 = {||}"    
+    by (auto simp add: fset_eq_iff)
+qed
+
+
+lemma fmran_add: "fmran (fmadd m1 m2) = fmran m2 |\<union>| fmran (fmdrop_fset (fmdom m2) m1)"
+  apply (simp add: fset_eq_iff fmlookup_ran_iff fmlookup_dom_iff fmlookup_image_iff)
+  apply (metis option.distinct(1) option.exhaust_sel)
+  done
+
+lemma fmimage_fmadd :
+  "fmimage (m1 ++\<^sub>f m2) s = fmimage m2 s |\<union>| fmimage m1 (s |-| fmdom m2)"
+  by (simp add: fset_eq_iff fmlookup_image_iff fmlookup_dom_iff) force
+
+lemma fmadd_comm:
+  assumes "fmdom f1 |\<inter>| fmdom f2 = {||}"
+  shows "fmadd f1 f2 = fmadd f2 f1"
+  using assms
+  by (simp add: fmap_ext_iff fset_eq_iff fmlookup_dom_iff)
+     (metis option.distinct(1))
+
+lemma fmcomp_add_left: "fmcomp (fmadd f1 f2) f3 = fmadd (fmcomp f1 f3) (fmcomp f2 f3)"
+  by (auto simp add: fmap_ext_iff_cases fmdom_fmcomp Option.bind_eq_Some_conv Option.bind_eq_None_conv fmlookup_invimage_iff fmlookup_dom_iff)
+
+lemma fmcomp_add_right: "fmdom f1 |\<inter>| fmdom f2 = {||} \<Longrightarrow> fmcomp f3 (fmadd f1 f2) = fmadd (fmcomp f3 f1) (fmcomp f3 f2)"
+  by (auto simp add: fset_eq_iff fmap_ext_iff_cases fmdom_fmcomp Option.bind_eq_Some_conv Option.bind_eq_None_conv fmlookup_invimage_iff fmlookup_dom_iff)
+  
+
+lemma inverse_fmap_comp:
+  assumes inj: "fmap_inj (f1 ++\<^sub>f f2)"
+      and disj: "fmdom f1 |\<inter>| fmdom f2 = {||}"
+  shows "inverse_fmap (f1 ++\<^sub>f f2) = inverse_fmap f1 ++\<^sub>f inverse_fmap f2"
+  using assms
+  apply (simp add: fset_eq_iff fmap_ext_iff fmlookup_dom_iff fmlookup_ran_iff)
+  by (smt (verit) fmap_inj_double_inverse fmap_inj_spec fmdom_notD fmdom_notI fmlookup_add fmlookup_dom_iff inj inj_fmap_inverse_correct inverse_fmap_retrieves_original option.distinct(1))
+
+
+lemma fmcomp_non_fitting_dom_ran_empty:
+  assumes "fmdom f1 |\<inter>| fmran f2 = {||}"
+  shows "fmcomp f1 f2 = fmempty"
+  using assms
+  apply (simp add: fmap_ext_iff Option.bind_eq_None_conv fset_eq_iff fmlookup_dom_iff fmlookup_ran_iff)
+  by (metis option.collapse)
+
+lemma fmcomp_empty_left[simp]: "fmcomp fmempty f = fmempty"
+  by (simp add: fmap_ext_iff Option.bind_eq_None_conv)
+
+lemma fmcomp_empty_right[simp]: "fmcomp f fmempty = fmempty"
+  by (simp add: fmap_ext_iff Option.bind_eq_None_conv)
+
+
 end
